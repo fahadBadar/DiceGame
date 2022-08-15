@@ -1,147 +1,189 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+
 namespace DiceGameRedraft
 {
-    internal class Program
+    internal static class Program
     {
         public static void Main(string[] args)
         {
             var game = new Game();
             game.Play();
         }
-        class Game
+
+        class Die
         {
             private readonly Random _random = new Random();
-            private int _pOneScore;
-            private int _pTwoScore;
-            bool _isPlayerOneTurn = true;
+            private int _lastRoll;
+
+            public void Roll()
+            {
+                _lastRoll = _random.Next(1, 7);
+            }
+
+            public int GetLastRoll()
+            {
+                return _lastRoll;
+            }
+        }
+
+        private class Player
+        {
+            private readonly string _playerName;
+            private int _playerScore;
+
+            public Player(string playerName)
+            {
+                _playerName = playerName;
+            }
+
+            public bool HasWon()
+            {
+                return _playerScore >= 5;
+            }
+
+            public void DisplayScore()
+            {
+                Console.WriteLine("{0}: {1}",_playerName, _playerScore);
+            }
+
+            public void AnnounceIfWon()
+            {
+                if (HasWon())
+                {
+                    Console.WriteLine("{0} HAS ONE", _playerName.ToUpper());
+                }
+            }
+
+            public void PromptNextRoll()
+            {
+                Console.WriteLine("{0} PRESS ENTER TO ROLL", _playerName.ToUpper());
+                Console.ReadLine();
+            }
+
+            public void AddToScore(int score)
+            {
+                _playerScore += score;
+            }
+        }
+
+        class Game
+        {
+            private readonly Player _playerOne = new Player("player one");
+            private readonly Player _playerTwo = new Player("player two");
+            private Player _currentPlayer;
             private bool _hasReRolled;
-            
+            private readonly List<Die> _dice = new List<Die> { new Die(), new Die(), new Die(), new Die(), new Die() };
+
+            public Game()
+            {
+                _currentPlayer = _playerOne;
+            }
+
             public void Play()
             {
-                while (_pTwoScore < 5 && _pOneScore < 5)
+                while (!_playerOne.HasWon() && !_playerTwo.HasWon())
                 {
                     _hasReRolled = false;
-                    PromptNextPlayer();
-                    List<int> roll = TakeTurn();
-                    ShowScores(roll);
-                    _isPlayerOneTurn = !_isPlayerOneTurn;
+                    _currentPlayer.PromptNextRoll();
+                    TakeTurn();
+                    ShowScores();
+                    SwitchPlayer();
                 }
-                Console.WriteLine(!_isPlayerOneTurn ? "PLAYER ONE WINS" : "PLAYER TWO WINS");
+
+                _playerOne.AnnounceIfWon();
+                _playerTwo.AnnounceIfWon();
             }
-            private static void ShowScores(List<int> roll)
+
+            private void SwitchPlayer()
+            {
+                _currentPlayer = _currentPlayer == _playerOne ? _playerTwo : _playerOne;
+            }
+
+            private void ShowScores()
             {
                 Console.WriteLine("YOU ROLLED THE FOLLOWING ");
-                roll.ForEach(Console.Write);
+                foreach (var die in _dice)
+                {
+                    Console.Write(die.GetLastRoll());
+                }
                 Console.WriteLine("\n------------------------------");
             }
-            private void PromptNextPlayer()
-            {
-                if (_isPlayerOneTurn)
-                {
-                    Console.WriteLine("PLAYER ONE PRESS ENTER TO ROLL");
-                    Console.ReadLine();
-                }
-                else
-                {
-                    Console.WriteLine("PLAYER TWO PRESS ENTER TO ROLL");
-                    Console.ReadLine();
-                }
-            }
+
             private void DisplayScores()
             {
-                Console.WriteLine("SCORES: Player One: {0} Player Two {1}", _pOneScore, _pTwoScore);
+                Console.WriteLine("SCORES");
+                _playerOne.DisplayScore();
+                _playerTwo.DisplayScore();
             }
-            private List<int> TakeTurn()
+
+            private void TakeTurn()
             {
-                List<int> rolls = new List<int>();
-                for (int i = 0; i < 5; i++)
+                foreach (var die in _dice)
                 {
-                    int roll = _random.Next(1, 7);
-                    rolls.Add(roll);
+                    die.Roll();
                 }
-                List<int> rollGroup = HighestScoringGroup(rolls);
+
+                var rollGroup = HighestScoringGroup();
                 ScorePlayer(rollGroup);
-                return rolls;
             }
-            private List<int> HighestScoringGroup(List<int> rolls)
+
+            private List<Die> HighestScoringGroup()
             {
-                var groupedRolls = rolls
-                    .GroupBy(u => u)
+                var groupedRolls = _dice
+                    .GroupBy(u => u.GetLastRoll())
                     .Select(grp => grp.ToList())
                     .OrderByDescending(grp => grp.Count)
                     .ToList().First();
-                
+
                 return groupedRolls;
             }
-            private void ScorePlayer(List<int> rollGroup)
+
+            private void ScorePlayer(List<Die> rollGroup)
             {
                 switch (rollGroup.Count)
                 {
                     case 2:
                         if (!_hasReRolled)
                         {
-                            ScorePlayer(ReRoll(rollGroup));
+                            ShowScores();
+                            ReRoll(rollGroup.First().GetLastRoll());
+                            Console.WriteLine("REROLLING...");
+                            rollGroup = HighestScoringGroup();
+                            ScorePlayer(rollGroup);
                         }
+
                         break;
                     case 3:
-                        Console.WriteLine("YOU GOT {1} {0}s", rollGroup.First(), rollGroup.Count);
-                        Console.WriteLine("SCORE +3");
-                        if (_isPlayerOneTurn)
-                        {
-                            _pOneScore += 3;
-                        }
-                        else
-                        {
-                            _pTwoScore += 3;
-                        }
-                        DisplayScores();
+                        AddAndDisplayScore(rollGroup, 3);
                         break;
-                    case 4: 
-                        Console.WriteLine("YOU GOT {1} {0}s", rollGroup.First(), rollGroup.Count);
-                        Console.WriteLine("SCORE +6");
-                        if (_isPlayerOneTurn)
-                        {
-                            _pOneScore += 6;
-                        }
-                        else
-                        {
-                            _pTwoScore += 6;
-                        }
-                        DisplayScores();
+                    case 4:
+                        AddAndDisplayScore(rollGroup, 6);
                         break;
                     case 5:
-                        Console.WriteLine("YOU GOT {1} {0}s", rollGroup.First(), rollGroup.Count);
-                        Console.WriteLine("SCORE +12");
-                        if (_isPlayerOneTurn)
-                        {
-                            _pOneScore += 12;
-                        }
-                        else
-                        {
-                            _pTwoScore += 12;
-                        }
-                        DisplayScores();
+                        AddAndDisplayScore(rollGroup, 12);
                         break;
                 }
-    
+                
             }
-            private List<int> ReRoll(List<int> rollGroup)
+
+            private void AddAndDisplayScore(List<Die> rollGroup, int score)
             {
-                List<int> rolls = new List<int>();
-                for (int i = 0; i < 3; i++)
+                Console.WriteLine("YOU GOT {1} {0}s", rollGroup.First().GetLastRoll(), rollGroup.Count);
+                Console.WriteLine("SCORE +{0}", score);
+                _currentPlayer.AddToScore(score);
+                DisplayScores();
+            }
+
+            private void ReRoll(int matchingPairRoll)
+            {
+                foreach (var die in _dice.Where(die => die.GetLastRoll() != matchingPairRoll).ToList())
                 {
-                    int roll = _random.Next(1, 7);
-                    rolls.Add(roll);
-                    if (roll == rollGroup.First())
-                    {
-                        rollGroup.Add(roll);
-                    }
+                    die.Roll();
                 }
+
                 _hasReRolled = true;
-                ShowScores(rolls);
-                return rollGroup;
             }
         }
     }
